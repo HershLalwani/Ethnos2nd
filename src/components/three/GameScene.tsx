@@ -2,32 +2,33 @@
 
 import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
-import { Island } from "./Island";
-import { Water } from "./Water";
+import { Suspense } from "react";
+import { Board } from "./Board";
 
 export function GameScene() {
   return (
     <Canvas
-      camera={{ position: [0, 11.5, 20], fov: 44 }}
+      camera={{ position: [0, 10, 11], fov: 44 }}
       dpr={[1, 2]}
       style={{ position: "absolute", inset: 0 }}
     >
-      <color attach="background" args={["#9fc3d8"]} />
-      <fog attach="fog" args={["#9fc3d8", 34, 85]} />
-      <hemisphereLight args={["#dcecf5", "#3d5a63", 0.85]} />
-      <directionalLight position={[8, 14, 6]} intensity={1.5} color="#fff4dd" />
-      <directionalLight position={[-6, 8, -8]} intensity={0.35} color="#bcd6ff" />
-      <Water />
-      <Island />
+      <color attach="background" args={["#141a26"]} />
+      <fog attach="fog" args={["#141a26", 28, 55]} />
+      <hemisphereLight args={["#e8eef7", "#3a3226", 0.9]} />
+      <directionalLight position={[6, 12, 4]} intensity={1.3} color="#fff2dd" />
+      <directionalLight position={[-7, 8, -6]} intensity={0.4} color="#cfe0ff" />
+      <Suspense fallback={null}>
+        <Board />
+      </Suspense>
       <OrbitControls
-        target={[0, 0.6, 0]}
+        target={[0, 0, 0.4]}
         enablePan={false}
-        minDistance={10}
-        maxDistance={30}
-        minPolarAngle={0.55}
-        maxPolarAngle={1.32}
-        minAzimuthAngle={-1.05}
-        maxAzimuthAngle={1.05}
+        minDistance={5}
+        maxDistance={24}
+        minPolarAngle={0.05}
+        maxPolarAngle={1.25}
+        minAzimuthAngle={-1.1}
+        maxAzimuthAngle={1.1}
         enableDamping
         dampingFactor={0.08}
       />

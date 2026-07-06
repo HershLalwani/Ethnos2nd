@@ -11,30 +11,29 @@ export function partyPrestige(size: number): number {
 }
 
 /**
- * The 18 Prestige tokens. The 2E rulebook doesn't enumerate the exact
- * distribution; reviews state values run 4-12 with duplicates (solo setup
- * references 4, 6, 8, 10, 10, 12). We use two of each value 4-12.
- * Tokens marked `forFourPlus` are removed in 2-3 player games (the "4+" mark).
+ * The 18 Prestige tokens, per the physical set: 4 ×6, 6 ×5, 8 ×4, 10 ×2, 12 ×1.
+ * Tokens marked `forFourPlus` bear the "4+" icon (three 4s and two 6s) and are
+ * removed in 2-3 player games.
  */
 export const PRESTIGE_TOKENS: { value: number; forFourPlus: boolean }[] = [
   { value: 4, forFourPlus: false },
   { value: 4, forFourPlus: false },
-  { value: 5, forFourPlus: false },
-  { value: 5, forFourPlus: false },
+  { value: 4, forFourPlus: false },
+  { value: 4, forFourPlus: true },
+  { value: 4, forFourPlus: true },
+  { value: 4, forFourPlus: true },
   { value: 6, forFourPlus: false },
   { value: 6, forFourPlus: false },
-  { value: 7, forFourPlus: false },
-  { value: 7, forFourPlus: true },
+  { value: 6, forFourPlus: false },
+  { value: 6, forFourPlus: true },
+  { value: 6, forFourPlus: true },
   { value: 8, forFourPlus: false },
-  { value: 8, forFourPlus: true },
-  { value: 9, forFourPlus: false },
-  { value: 9, forFourPlus: true },
+  { value: 8, forFourPlus: false },
+  { value: 8, forFourPlus: false },
+  { value: 8, forFourPlus: false },
   { value: 10, forFourPlus: false },
-  { value: 10, forFourPlus: true },
-  { value: 11, forFourPlus: false },
-  { value: 11, forFourPlus: true },
+  { value: 10, forFourPlus: false },
   { value: 12, forFourPlus: false },
-  { value: 12, forFourPlus: true },
 ];
 
 /** Koi board: last space of the track (marker can't move past it). */
