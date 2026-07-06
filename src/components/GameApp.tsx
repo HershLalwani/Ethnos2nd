@@ -17,6 +17,7 @@ export default function GameApp() {
   const game = useGame((s) => s.game);
   const mode = useGame((s) => s.mode);
   const lobby = useGame((s) => s.lobby);
+  const connStatus = useGame((s) => s.connStatus);
   const dispatch = useGame((s) => s.dispatch);
   const joinRoom = useGame((s) => s.joinRoom);
 
@@ -78,6 +79,9 @@ export default function GameApp() {
       <HandBar />
       <SideDrawer />
       <Modals />
+      {mode === "online" && connStatus !== "open" && (
+        <div className="conn-banner">⚡ Connection lost — reconnecting… (your seat is saved)</div>
+      )}
     </div>
   );
 }

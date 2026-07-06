@@ -39,10 +39,18 @@ function clientId(): string {
 export class NetClient {
   private ws: WebSocket | null = null;
   private queue: string[] = [];
+  private manualClose = false;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryDelay = 500;
   onMessage: (msg: ServerMessage) => void = () => {};
   onStatus: (status: "connecting" | "open" | "closed") => void = () => {};
 
   connect() {
+    this.manualClose = false;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -50,6 +58,7 @@ export class NetClient {
     const ws = new WebSocket(`${wsUrl()}/?cid=${clientId()}`);
     this.ws = ws;
     ws.onopen = () => {
+      this.retryDelay = 500;
       this.onStatus("open");
       for (const raw of this.queue) ws.send(raw);
       this.queue = [];
@@ -64,8 +73,21 @@ export class NetClient {
     ws.onclose = () => {
       if (this.ws === ws) this.ws = null;
       this.onStatus("closed");
+      this.scheduleRetry();
     };
     ws.onerror = () => ws.close();
+  }
+
+  /** Reconnect after an unexpected drop (server redeploy, proxy request
+   *  timeout — e.g. Cloud Run caps a socket at 60min). Backs off to 10s;
+   *  a deliberate close() stops the retries. */
+  private scheduleRetry() {
+    if (this.manualClose || this.retryTimer) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.connect();
+    }, this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, 10_000);
   }
 
   send(msg: unknown) {
@@ -78,6 +100,11 @@ export class NetClient {
   }
 
   close() {
+    this.manualClose = true;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     this.ws?.close();
     this.ws = null;
   }

@@ -71,7 +71,15 @@ const net = new NetClient();
 
 export const useGame = create<GameStore>((set, get) => {
   if (typeof window !== "undefined") {
-    net.onStatus = (status) => set({ connStatus: status });
+    net.onStatus = (status) => {
+      set({ connStatus: status });
+      // Socket came back after a drop: reclaim our seat. The server matches
+      // us by client id, so this is a no-op if we never actually lost it.
+      const { mode, roomCode } = get();
+      if (status === "open" && mode === "online" && roomCode) {
+        net.send({ t: "join", code: roomCode, name: sessionStorage.getItem("ethnos-name") ?? "" });
+      }
+    };
     net.onMessage = (msg) => {
       switch (msg.t) {
         case "joined":
