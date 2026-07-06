@@ -97,15 +97,17 @@ export function newGame(config: GameConfig): GameState {
     rngState: config.seed >>> 0 || 1,
   };
 
-  // Prestige tokens: shuffle, deal 3 per Region (2 in 2-3p games, "4+" removed),
-  // then sort ascending within each Region (lowest on the "I" space).
+  // Prestige tokens: shuffle, deal 3 per Region (2 in 2-3p games, +4 removed),
+  // then sort by printed base value within each Region (lowest on the "I" space).
   const tokenPool = shuffle(
     state,
-    PRESTIGE_TOKENS.filter((t) => !smallGame || !t.forFourPlus).map((t) => t.value)
+    PRESTIGE_TOKENS.filter((t) => !smallGame || !t.plus4)
   );
   const perRegion = smallGame ? 2 : 3;
   REGION_COLORS.forEach((color, i) => {
-    const tokens = tokenPool.slice(i * perRegion, (i + 1) * perRegion).sort((a, b) => a - b);
+    const tokens = tokenPool
+      .slice(i * perRegion, (i + 1) * perRegion)
+      .sort((a, b) => a.baseValue - b.baseValue);
     state.regions[color] = {
       color,
       prestigeTokens: tokens,

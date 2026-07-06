@@ -63,3 +63,39 @@ export function labelTexture(
   });
   return { tex, aspect: w / h };
 }
+
+/** Square texture for the top face of a Region prestige token. */
+export function prestigeTokenTexture(opts: {
+  baseValue: number;
+  plus4: boolean;
+  coinSum?: number;
+  bg: string;
+  color?: string;
+}): THREE.CanvasTexture {
+  const { baseValue, plus4, coinSum = 0, bg, color = "#2b2416" } = opts;
+  const key = `prestige-token-${baseValue}-${plus4}-${coinSum}-${bg}-${color}`;
+  return canvasTexture(key, 256, 256, (ctx) => {
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 256, 256);
+
+    ctx.strokeStyle = "rgba(43, 36, 22, 0.35)";
+    ctx.lineWidth = 12;
+    ctx.strokeRect(6, 6, 244, 244);
+
+    ctx.fillStyle = color;
+    ctx.shadowColor = "rgba(0,0,0,0.25)";
+    ctx.shadowBlur = 8;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    const text = coinSum > 0 ? `${baseValue}+${coinSum}` : String(baseValue);
+    ctx.font = `bold ${coinSum > 0 ? 76 : 116}px ${UI_FONT}`;
+    ctx.fillText(text, 128, 138);
+
+    if (plus4) {
+      ctx.shadowBlur = 4;
+      ctx.font = `bold 48px ${UI_FONT}`;
+      ctx.fillText("+4", 194, 68);
+    }
+  });
+}

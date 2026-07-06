@@ -20,7 +20,10 @@ function wsUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_WS_URL;
   if (explicit) return explicit;
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${window.location.hostname}:3001`;
+  // `next dev` serves the page on 3000 with the ws server on 3001; in
+  // production one Bun process serves both the site and the websocket.
+  if (window.location.port === "3000") return `${proto}://${window.location.hostname}:3001`;
+  return `${proto}://${window.location.host}`;
 }
 
 function clientId(): string {

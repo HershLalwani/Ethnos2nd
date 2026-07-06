@@ -3,7 +3,14 @@ import { decideAction } from "./ai";
 import { buildAllyCards, buildClanCards } from "./cards";
 import { applyAction, newGame } from "./engine";
 import { scoreAge } from "./score";
-import { isDragon, type Card, type Clan, type GameConfig, type GameState } from "./types";
+import {
+  isDragon,
+  type Card,
+  type Clan,
+  type GameConfig,
+  type GameState,
+  type PrestigeToken,
+} from "./types";
 import { isValidParty, markerEligible } from "./validate";
 
 function config(overrides: Partial<GameConfig> = {}): GameConfig {
@@ -20,6 +27,10 @@ function config(overrides: Partial<GameConfig> = {}): GameConfig {
 
 function card(clan: Clan, color: Card["color"], n = 0): Card {
   return { id: `${clan}-${color}-${n}`, clan, color };
+}
+
+function prestigeToken(baseValue: number, plus4 = false): PrestigeToken {
+  return { baseValue, plus4 };
 }
 
 describe("deck", () => {
@@ -42,6 +53,14 @@ describe("deck", () => {
     // deck end = top; dragons must be in the bottom (low-index) half
     const half = Math.ceil((state.deck.length - 3) / 2) + 3;
     for (const pos of dragonPositions) expect(pos).toBeLessThan(half);
+  });
+
+  test("prestige tokens are ordered by base value when dealt", () => {
+    const state = newGame(config({ seed: 1 }));
+    for (const region of Object.values(state.regions)) {
+      const bases = region.prestigeTokens.map((t) => t.baseValue);
+      expect(bases).toEqual([...bases].sort((a, b) => a - b));
+    }
   });
 });
 
@@ -210,10 +229,30 @@ describe("playing parties", () => {
 });
 
 describe("age scoring", () => {
+  test("later ages still award earlier prestige tokens to lower ranks", () => {
+    const state = primedState();
+    state.age = 3;
+    state.regions.red.prestigeTokens = [prestigeToken(4), prestigeToken(6), prestigeToken(10)];
+    state.regions.red.markers = [3, 2, 1, 0];
+    for (const c of ["blue", "green", "yellow", "black", "white"] as const) {
+      state.regions[c].markers = [0, 0, 0, 0];
+    }
+    state.players.forEach((p) => (p.parties = []));
+
+    const summary = scoreAge(state);
+
+    expect(state.players.map((p) => p.prestige)).toEqual([10, 6, 4, 0]);
+    expect(summary.regionLines.filter((l) => l.region === "red").map((l) => l.prestige)).toEqual([
+      10,
+      6,
+      4,
+    ]);
+  });
+
   test("region awards by rank, ties split rounded down", () => {
     const state = primedState();
     state.age = 2;
-    state.regions.red.prestigeTokens = [4, 6, 10];
+    state.regions.red.prestigeTokens = [prestigeToken(4), prestigeToken(6), prestigeToken(10)];
     state.regions.red.markers = [2, 2, 0, 0];
     for (const c of ["blue", "green", "yellow", "black", "white"] as const) {
       state.regions[c].markers = [0, 0, 0, 0];
@@ -229,7 +268,7 @@ describe("age scoring", () => {
   test("fox tokens break ties for control", () => {
     const state = primedState();
     state.age = 1;
-    state.regions.red.prestigeTokens = [4, 6, 10];
+    state.regions.red.prestigeTokens = [prestigeToken(4), prestigeToken(6), prestigeToken(10)];
     state.regions.red.markers = [2, 2, 0, 0];
     state.players[1].foxTokens = [3];
     for (const c of ["blue", "green", "yellow", "black", "white"] as const) {
@@ -239,6 +278,21 @@ describe("age scoring", () => {
     scoreAge(state);
     expect(state.players[1].prestige).toBe(4); // fox holder wins the I token
     expect(state.players[0].prestige).toBe(0);
+  });
+
+  test("plus4 prestige tokens score as base plus four", () => {
+    const state = primedState();
+    state.age = 1;
+    state.regions.red.prestigeTokens = [prestigeToken(4, true), prestigeToken(6), prestigeToken(10)];
+    state.regions.red.markers = [1, 0, 0, 0];
+    for (const c of ["blue", "green", "yellow", "black", "white"] as const) {
+      state.regions[c].markers = [0, 0, 0, 0];
+    }
+    state.players.forEach((p) => (p.parties = []));
+
+    scoreAge(state);
+
+    expect(state.players[0].prestige).toBe(8);
   });
 
   test("dogs disperse before party scoring; rabbit scores +1", () => {

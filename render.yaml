@@ -1,0 +1,9 @@
+# Render blueprint: creates the Ethnos web service when you connect this repo
+# at https://dashboard.render.com → New → Blueprint.
+services:
+  - type: web
+    name: ethnos
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    autoDeploy: true

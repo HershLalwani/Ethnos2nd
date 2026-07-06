@@ -3,11 +3,13 @@ import {
   KOI_PRESTIGE,
   MONKEY_MIGRATE_PRESTIGE,
   partyPrestige,
+  prestigeTokenValue,
 } from "./constants";
 import type {
   AgeScoringSummary,
   GameState,
   PartyScoreLine,
+  PrestigeToken,
   RegionColor,
   RegionScoreLine,
 } from "./types";
@@ -61,7 +63,7 @@ function scoreRegion(
   state: GameState,
   regionKey: RegionColor | "koi",
   contenders: Contender[],
-  tokens: number[],
+  tokens: (PrestigeToken | number)[],
   coinBonus: number
 ): RegionScoreLine[] {
   const lines: RegionScoreLine[] = [];
@@ -74,11 +76,11 @@ function scoreRegion(
     if (twoPlayerFinal) {
       if (rank !== 1) return 0;
       const sole = contenders.length === 1;
-      return tokens[1] + (sole ? tokens[0] : 0);
+      return tokenValue(tokens[1]) + (sole ? tokenValue(tokens[0]) : 0);
     }
     const tokenIndex = age - rank; // Age 3: rank1 -> III (idx 2) ... rank3 -> I (idx 0)
     if (tokenIndex < 0 || tokenIndex >= tokens.length) return 0;
-    return tokens[tokenIndex];
+    return tokenValue(tokens[tokenIndex]);
   };
 
   const groups = rankGroups(state, contenders);
@@ -103,6 +105,10 @@ function scoreRegion(
     rank += group.length;
   }
   return lines;
+}
+
+function tokenValue(token: PrestigeToken | number): number {
+  return typeof token === "number" ? token : prestigeTokenValue(token);
 }
 
 /** Resolve all End-of-Age scoring. Mutates state and returns the summary. */

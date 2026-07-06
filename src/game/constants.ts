@@ -1,4 +1,4 @@
-import type { Clan, RegionColor } from "./types";
+import type { Clan, PrestigeToken, RegionColor } from "./types";
 
 export const HAND_LIMIT = 10;
 export const PARTY_MAX = 10;
@@ -12,29 +12,33 @@ export function partyPrestige(size: number): number {
 
 /**
  * The 18 Prestige tokens, per the physical set: 4 ×6, 6 ×5, 8 ×4, 10 ×2, 12 ×1.
- * Tokens marked `forFourPlus` bear the "4+" icon (three 4s and two 6s) and are
- * removed in 2-3 player games.
+ * Tokens marked `plus4` have a +4 bonus printed as an exponent and are removed
+ * in 2-3 player games.
  */
-export const PRESTIGE_TOKENS: { value: number; forFourPlus: boolean }[] = [
-  { value: 4, forFourPlus: false },
-  { value: 4, forFourPlus: false },
-  { value: 4, forFourPlus: false },
-  { value: 4, forFourPlus: true },
-  { value: 4, forFourPlus: true },
-  { value: 4, forFourPlus: true },
-  { value: 6, forFourPlus: false },
-  { value: 6, forFourPlus: false },
-  { value: 6, forFourPlus: false },
-  { value: 6, forFourPlus: true },
-  { value: 6, forFourPlus: true },
-  { value: 8, forFourPlus: false },
-  { value: 8, forFourPlus: false },
-  { value: 8, forFourPlus: false },
-  { value: 8, forFourPlus: false },
-  { value: 10, forFourPlus: false },
-  { value: 10, forFourPlus: false },
-  { value: 12, forFourPlus: false },
+export const PRESTIGE_TOKENS: PrestigeToken[] = [
+  { baseValue: 4, plus4: false },
+  { baseValue: 4, plus4: false },
+  { baseValue: 4, plus4: false },
+  { baseValue: 4, plus4: true },
+  { baseValue: 4, plus4: true },
+  { baseValue: 4, plus4: true },
+  { baseValue: 6, plus4: false },
+  { baseValue: 6, plus4: false },
+  { baseValue: 6, plus4: false },
+  { baseValue: 6, plus4: true },
+  { baseValue: 6, plus4: true },
+  { baseValue: 8, plus4: false },
+  { baseValue: 8, plus4: false },
+  { baseValue: 8, plus4: false },
+  { baseValue: 8, plus4: false },
+  { baseValue: 10, plus4: false },
+  { baseValue: 10, plus4: false },
+  { baseValue: 12, plus4: false },
 ];
+
+export function prestigeTokenValue(token: PrestigeToken): number {
+  return token.baseValue + (token.plus4 ? 4 : 0);
+}
 
 /** Koi board: last space of the track (marker can't move past it). */
 export const KOI_TRACK_END = 12;

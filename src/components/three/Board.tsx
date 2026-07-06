@@ -8,7 +8,7 @@ import { koiSymbols } from "@/game/engine";
 import { REGION_COLORS, type GameState, type RegionColor } from "@/game/types";
 import { useGame } from "@/store/gameStore";
 import { BOARD_H, BOARD_W, REGION_MAP, trackUV, uvToWorld } from "./boardMap";
-import { labelTexture } from "./textures";
+import { labelTexture, prestigeTokenTexture } from "./textures";
 
 const BOARD_Y = 0.02; // board sheet sits just above the table top (y = 0)
 
@@ -86,9 +86,9 @@ function RegionMarkers({ game, color }: { game: GameState; color: RegionColor })
 }
 
 /**
- * Prestige tokens sitting on the region's printed Ⅰ/Ⅱ/Ⅲ slots. Tokens of
- * already-scored Ages are gone (like the physical game); the current Age's
- * token is gold and shows any Raccoon coins added to it.
+ * Prestige tokens sitting on the region's printed Ⅰ/Ⅱ/Ⅲ slots. Earlier Age
+ * tokens stay visible because later Ages award them to lower-ranked players;
+ * the current Age's highest-rank token is gold and shows any Raccoon coins.
  */
 function RegionPrestigeTokens({ game, color }: { game: GameState; color: RegionColor }) {
   const region = game.regions[color];
@@ -96,29 +96,27 @@ function RegionPrestigeTokens({ game, color }: { game: GameState; color: RegionC
   const coinSum = region.coins.reduce((s, c) => s + c, 0);
   return (
     <>
-      {region.prestigeTokens.map((value, i) => {
-        if (i < ageIdx) return null; // scored and removed
+      {region.prestigeTokens.map((token, i) => {
         const active = i === ageIdx;
         const [x, z] = uvToWorld(...REGION_MAP[color].box[i]);
-        const text = active && coinSum > 0 ? `${value}+${coinSum}` : String(value);
-        const label = labelTexture(text, {
-          size: 46,
-          color: "#2b2416",
-          bg: active ? "#f6c945" : "#ece4cd",
+        const bg = active ? "#f6c945" : "#ece4cd";
+        const faceTex = prestigeTokenTexture({
+          baseValue: token.baseValue,
+          plus4: token.plus4,
+          coinSum: active ? coinSum : 0,
+          bg,
         });
         return (
           <group key={`${color}-${i}`} position={[x, 0, z]}>
             <mesh position={[0, BOARD_Y + 0.035, 0]}>
-              <cylinderGeometry args={[0.31, 0.31, 0.07, 6]} />
-              <meshStandardMaterial color={active ? "#f6c945" : "#ece4cd"} roughness={0.5} />
+              <boxGeometry args={[0.45, 0.07, 0.45]} />
+              <meshStandardMaterial attach="material-0" color={bg} roughness={0.55} />
+              <meshStandardMaterial attach="material-1" color={bg} roughness={0.55} />
+              <meshStandardMaterial attach="material-2" map={faceTex} roughness={0.5} />
+              <meshStandardMaterial attach="material-3" color={bg} roughness={0.55} />
+              <meshStandardMaterial attach="material-4" color={bg} roughness={0.55} />
+              <meshStandardMaterial attach="material-5" color={bg} roughness={0.55} />
             </mesh>
-            <Sprite
-              tex={label.tex}
-              aspect={label.aspect}
-              height={0.44}
-              position={[0, BOARD_Y + 0.42, 0]}
-              opacity={active ? 1 : 0.85}
-            />
           </group>
         );
       })}

@@ -1,4 +1,4 @@
-import { HAND_LIMIT, partyPrestige } from "./constants";
+import { HAND_LIMIT, partyPrestige, prestigeTokenValue } from "./constants";
 import { koiSymbolsCrossed } from "./engine";
 import {
   REGION_COLORS,
@@ -21,7 +21,7 @@ function regionStake(state: GameState, region: RegionColor): number {
   const tokens = state.regions[region].prestigeTokens;
   const idx = Math.min(state.age - 1, tokens.length - 1);
   const coins = state.regions[region].coins.reduce((a, b) => a + b, 0);
-  return tokens[idx] + coins;
+  return prestigeTokenValue(tokens[idx]) + coins;
 }
 
 /** How valuable is adding one marker for `player` in `region` right now? */

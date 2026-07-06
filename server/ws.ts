@@ -364,12 +364,30 @@ function leaveCurrentRoom(ws: WS) {
 // Server
 // ---------------------------------------------------------------------------
 
+// In production this process also serves the static Next.js export (`out/`,
+// built by `bun run build`). In dev the folder simply doesn't exist and
+// `next dev` serves the app instead.
+const STATIC_DIR = new URL("../out/", import.meta.url).pathname;
+
+async function serveStatic(pathname: string): Promise<Response | null> {
+  if (pathname.includes("..")) return null;
+  const path = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
+  // Next's export maps the route /foo to out/foo.html.
+  for (const candidate of [path, `${path}.html`, `${path}/index.html`]) {
+    const file = Bun.file(STATIC_DIR + candidate.replace(/^\//, ""));
+    if (await file.exists()) return new Response(file);
+  }
+  return null;
+}
+
 Bun.serve<SocketData, never>({
   port: PORT,
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
     const clientId = url.searchParams.get("cid") ?? crypto.randomUUID();
     if (server.upgrade(req, { data: { clientId, roomCode: null } })) return;
+    const page = await serveStatic(url.pathname);
+    if (page) return page;
     return new Response("Ethnos multiplayer server. Connect via WebSocket.", { status: 200 });
   },
   websocket: {

@@ -53,10 +53,16 @@ export interface PlayerState {
   koiPos: number;
 }
 
+export interface PrestigeToken {
+  /** Printed value on the token before any +4 bonus marker. */
+  baseValue: number;
+  plus4: boolean;
+}
+
 export interface RegionState {
   color: RegionColor;
-  /** Prestige tokens ascending: index 0 = "I" space. 3 tokens (2 in 2-3p games). */
-  prestigeTokens: number[];
+  /** Prestige tokens ascending by printed base value: index 0 = "I" space. */
+  prestigeTokens: PrestigeToken[];
   /** Control marker count per player index. */
   markers: number[];
   /** Raccoon Coin values currently on this Region (cleared after Age scoring). */
