@@ -5,12 +5,91 @@ import { useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { PLAYER_COLORS, REGION_INFO } from "@/game/constants";
 import { koiSymbols } from "@/game/engine";
-import { REGION_COLORS, type GameState, type RegionColor } from "@/game/types";
+import {
+  REGION_COLORS,
+  type GameState,
+  type PlayerState,
+  type RegionColor,
+} from "@/game/types";
 import { useGame } from "@/store/gameStore";
 import { BOARD_H, BOARD_W, REGION_MAP, trackUV, uvToWorld } from "./boardMap";
-import { labelTexture, prestigeTokenTexture } from "./textures";
+import { cardTexture, labelTexture, prestigeTokenTexture } from "./textures";
 
 const BOARD_Y = 0.02; // board sheet sits just above the table top (y = 0)
+const TABLE_THICKNESS = 0.9;
+
+// ---------------------------------------------------------------------------
+// Table + seat geometry
+//
+// The table is a regular N-gon: 1-4 players -> square, 5 -> pentagon, 6 ->
+// hexagon. Seats sit at edge midpoints so every player faces the board across a
+// flat side. Seat direction is (sin a, cos a) in world XZ, so angle 0 points to
+// +Z (the front, toward the default camera) where the local viewer is seated.
+// ---------------------------------------------------------------------------
+
+/** Number of table sides for a player count. */
+function seatCount(numPlayers: number): number {
+  return numPlayers <= 4 ? 4 : numPlayers;
+}
+
+/** World-XZ angle of the seat (edge midpoint) at index `seatIdx`. */
+function seatAngleFor(seatIdx: number, sides: number): number {
+  return (seatIdx / sides) * Math.PI * 2;
+}
+
+/** World-XZ angle of the `cornerIdx`-th vertex — the free gap between seats. */
+function cornerAngleFor(cornerIdx: number, sides: number): number {
+  return Math.PI / sides + (cornerIdx / sides) * Math.PI * 2;
+}
+
+/** Which seat a player sits at, keeping the local viewer at the front and the
+ * rest spread evenly around the remaining sides. */
+function seatForPlayer(playerIdx: number, humanId: number, numPlayers: number, sides: number): number {
+  const rel = (playerIdx - humanId + numPlayers) % numPlayers;
+  return Math.round((rel * sides) / numPlayers) % sides;
+}
+
+/** Distance from the board centre to the (square) board photo edge in a given
+ * direction — used to place each player's cards just past their board edge. */
+function boardEdgeDist(angle: number): number {
+  const h = Math.max(BOARD_W, BOARD_H) / 2;
+  return h / Math.max(Math.abs(Math.sin(angle)), Math.abs(Math.cos(angle)));
+}
+
+/** Solid N-gon table top (surface at y=0, thickness extruded downward).
+ * Built as an N-segment cylinder rather than an ExtrudeGeometry: extrude caps
+ * rely on earcut triangulation, which the production minifier breaks (the
+ * table rendered with no top face). thetaStart puts the prism's corners at
+ * cornerAngleFor() angles, matching the seat/corner layout math. */
+function makeTableGeometry(apothem: number, sides: number, thickness: number): THREE.BufferGeometry {
+  const radius = apothem / Math.cos(Math.PI / sides);
+  const geo = new THREE.CylinderGeometry(
+    radius,
+    radius,
+    thickness,
+    sides,
+    1,
+    false,
+    Math.PI / sides
+  ).toNonIndexed();
+  geo.computeVertexNormals(); // un-index + recompute = flat-shaded facets
+  geo.translate(0, -thickness / 2, 0); // top surface at y = 0
+  return geo;
+}
+
+/** Index of the largest Bear-led Party a player has (holds the Bear token), or -1. */
+function bearPartyIndex(player: PlayerState): number {
+  let best = -1;
+  let bestSize = -1;
+  player.parties.forEach((party, i) => {
+    const leader = party.cards.find((c) => c.id === party.leaderId);
+    if (leader?.clan === "bear" && party.cards.length > bestSize) {
+      best = i;
+      bestSize = party.cards.length;
+    }
+  });
+  return best;
+}
 
 function Sprite({
   tex,
@@ -32,16 +111,16 @@ function Sprite({
   );
 }
 
-/** The wooden table with the board photo lying on it. */
-function TableAndBoard() {
+/** The N-gon wooden table with the board photo lying on it. */
+function TableAndBoard({ sides, apothem }: { sides: number; apothem: number }) {
   const tex = useLoader(THREE.TextureLoader, "/Ethnos.jpg");
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
+  const geo = useMemo(() => makeTableGeometry(apothem, sides, TABLE_THICKNESS), [apothem, sides]);
   return (
     <group>
-      <mesh position={[0, -0.45, 0]}>
-        <boxGeometry args={[BOARD_W + 8.5, 0.9, BOARD_H + 5]} />
-        <meshStandardMaterial color="#5d4230" roughness={0.85} />
+      <mesh geometry={geo}>
+        <meshStandardMaterial color="#8b5a2b" roughness={0.85} />
       </mesh>
       {/* toneMapped=false keeps the photo's original colors */}
       <mesh position={[0, BOARD_Y, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -213,67 +292,237 @@ function PrestigePawns({ game }: { game: GameState }) {
   );
 }
 
-/** Unclaimed Fox tokens lined up on the table beside the board. */
-function FoxTokens({ game }: { game: GameState }) {
-  if (!game.config.clans.includes("fox")) return null;
-  const x = BOARD_W / 2 + 1.1;
+/** Wooden Bear token placed beside the Party that currently holds it. */
+function BearToken({ position }: { position: [number, number, number] }) {
+  const { tex, aspect } = labelTexture("🐻", { size: 44 });
   return (
-    <>
-      {game.foxAvailable.map((v, i) => {
-        const { tex, aspect } = labelTexture(`🦊${v}`, { size: 40, color: "#fff", bg: "#7a4a1f" });
-        const z = -2.2 + i * 1.1;
+    <group position={position}>
+      <mesh position={[0, 0.05, 0]}>
+        <cylinderGeometry args={[0.3, 0.32, 0.1, 20]} />
+        <meshStandardMaterial color="#6b4a2b" roughness={0.6} />
+      </mesh>
+      <Sprite tex={tex} aspect={aspect} height={0.42} position={[0, 0.42, 0]} />
+    </group>
+  );
+}
+
+/** A player's Monkey Settlement board: the six Regions, lit + marked where the
+ * player has migrated markers. */
+function MonkeySettlement({
+  regions,
+  hex,
+  position,
+}: {
+  regions: RegionColor[];
+  hex: string;
+  position: [number, number, number];
+}) {
+  return (
+    <group position={position}>
+      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.75, 1.3]} />
+        <meshStandardMaterial color="#241c14" roughness={0.85} />
+      </mesh>
+      {REGION_COLORS.map((rc, i) => {
+        const col = i % 3;
+        const row = Math.floor(i / 3);
+        const sx = (col - 1) * 0.52;
+        const sz = (row - 0.5) * 0.52;
+        const occupied = regions.includes(rc);
         return (
-          <group key={v} position={[x, 0, z]}>
-            <mesh position={[0, 0.03, 0]}>
-              <cylinderGeometry args={[0.4, 0.4, 0.06, 20]} />
-              <meshStandardMaterial color="#8a5527" roughness={0.6} />
+          <group key={rc} position={[sx, 0, sz]}>
+            <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+              <circleGeometry args={[0.2, 20]} />
+              <meshBasicMaterial
+                color={REGION_INFO[rc].hex}
+                toneMapped={false}
+                transparent
+                opacity={occupied ? 1 : 0.25}
+              />
             </mesh>
-            <Sprite tex={tex} aspect={aspect} height={0.42} position={[0, 0.42, 0]} />
+            {occupied && (
+              <mesh position={[0, 0.14, 0]}>
+                <coneGeometry args={[0.08, 0.26, 8]} />
+                <meshStandardMaterial color={hex} roughness={0.35} />
+              </mesh>
+            )}
           </group>
         );
       })}
-    </>
+    </group>
+  );
+}
+
+/** Floating colored nameplate marking who sits on this side of the table. */
+function NameTag({
+  name,
+  hex,
+  prestige,
+  active,
+  position,
+}: {
+  name: string;
+  hex: string;
+  prestige: number;
+  active: boolean;
+  position: [number, number, number];
+}) {
+  const { tex, aspect } = labelTexture(`${active ? "▶ " : ""}${name}   ${prestige}`, {
+    size: 46,
+    color: "#ffffff",
+    bg: hex,
+  });
+  return <Sprite tex={tex} aspect={aspect} height={0.62} position={position} />;
+}
+
+/**
+ * One player's side of the table: their played Parties (face-up mini cards with
+ * the Leader highlighted), the Bear token beside its Party, their Monkey
+ * Settlement board, and a colored nameplate.
+ */
+function PlayerSeat({
+  game,
+  playerIdx,
+  seatIdx,
+  sides,
+  apothem,
+}: {
+  game: GameState;
+  playerIdx: number;
+  seatIdx: number;
+  sides: number;
+  apothem: number;
+}) {
+  const player = game.players[playerIdx];
+  const hex = PLAYER_COLORS[playerIdx].hex;
+  const M = seatAngleFor(seatIdx, sides);
+  const rowZ = boardEdgeDist(M) + 0.85;
+
+  const CARD_W = 0.56;
+  const CARD_H = 0.8;
+  const CARD_PITCH = CARD_W + 0.05;
+  const PARTY_GAP = 0.42;
+
+  const widths = player.parties.map((p) => Math.max(1, p.cards.length) * CARD_PITCH);
+  const totalW =
+    widths.reduce((s, w) => s + w, 0) + PARTY_GAP * Math.max(0, player.parties.length - 1);
+
+  const bearIdx = bearPartyIndex(player);
+  const holdsBear = game.bearHolder?.player === playerIdx && bearIdx >= 0;
+
+  let cursor = -totalW / 2;
+  const partyNodes = player.parties.map((party, pi) => {
+    const w = widths[pi];
+    const startX = cursor;
+    const centerX = cursor + w / 2;
+    cursor += w + PARTY_GAP;
+    return (
+      <group key={pi}>
+        {party.cards.map((card, ci) => {
+          const x = startX + CARD_PITCH * (ci + 0.5);
+          const isLeader = card.id === party.leaderId;
+          const { tex } = cardTexture(card.clan, card.color, isLeader);
+          return (
+            <group key={card.id} position={[x, 0, rowZ]}>
+              {isLeader && (
+                <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                  <planeGeometry args={[CARD_W + 0.1, CARD_H + 0.1]} />
+                  <meshBasicMaterial color="#f6c945" toneMapped={false} />
+                </mesh>
+              )}
+              <mesh position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <planeGeometry args={[CARD_W, CARD_H]} />
+                <meshBasicMaterial map={tex} transparent toneMapped={false} />
+              </mesh>
+            </group>
+          );
+        })}
+        {holdsBear && pi === bearIdx && (
+          <BearToken position={[centerX, 0, rowZ + CARD_H / 2 + 0.45]} />
+        )}
+      </group>
+    );
+  });
+
+  const monkeyInPlay = game.config.clans.includes("monkey");
+  const monkeyX = totalW / 2 + 1.35;
+
+  return (
+    <group rotation={[0, M, 0]}>
+      {partyNodes}
+      {monkeyInPlay && (
+        <MonkeySettlement regions={player.monkeyBoard} hex={hex} position={[monkeyX, 0, rowZ]} />
+      )}
+      <NameTag
+        name={player.name}
+        hex={hex}
+        prestige={player.prestige}
+        active={game.current === playerIdx && game.phase !== "over"}
+        position={[0, 0.5, apothem - 0.5]}
+      />
+    </group>
+  );
+}
+
+/** Unclaimed Fox tokens laid out in a free corner of the table. */
+function FoxTokens({ game, sides }: { game: GameState; sides: number }) {
+  if (!game.config.clans.includes("fox")) return null;
+  const angle = cornerAngleFor(1, sides);
+  const dist = boardEdgeDist(angle) + 1.3;
+  const n = game.foxAvailable.length;
+  const pitch = 0.68;
+  return (
+    <group rotation={[0, angle, 0]}>
+      {game.foxAvailable.map((v, i) => {
+        const { tex, aspect } = labelTexture(`🦊${v}`, { size: 38, color: "#fff", bg: "#7a4a1f" });
+        const x = (i - (n - 1) / 2) * pitch;
+        return (
+          <group key={v} position={[x, 0, dist]}>
+            <mesh position={[0, 0.04, 0]}>
+              <cylinderGeometry args={[0.3, 0.3, 0.08, 20]} />
+              <meshStandardMaterial color="#8a5527" roughness={0.6} />
+            </mesh>
+            <Sprite tex={tex} aspect={aspect} height={0.36} position={[0, 0.34, 0]} />
+          </group>
+        );
+      })}
+    </group>
   );
 }
 
 /**
- * Placeholder Koi Settlement board beside the main board — becomes a texture
- * once the real Koi board image is added.
+ * Placeholder Koi Settlement board tucked into a free corner — becomes a
+ * texture once the real Koi board image is added.
  */
-function KoiBoard({ game }: { game: GameState }) {
+function KoiBoard({ game, sides }: { game: GameState; sides: number }) {
   if (!game.koiInPlay) return null;
   const symbols = koiSymbols(game);
-  const bx = -(BOARD_W / 2 + 1.5);
-  const spaceZ = (i: number) => 4.2 - i * 0.7;
-  const koiLabel = labelTexture("🐟", { size: 40 });
+  const angle = cornerAngleFor(0, sides);
+  const len = 4.0;
+  const pitch = len / 13;
+  const dist = boardEdgeDist(angle) + 2.6; // centre distance from board centre
+  const spaceZ = (i: number) => dist + len / 2 - i * pitch;
   return (
-    <group position={[bx, 0, 0]}>
-      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[1.7, 9.6]} />
+    <group rotation={[0, angle, 0]}>
+      <mesh position={[0, 0.01, dist]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[1.15, len + 0.4]} />
         <meshStandardMaterial color="#1d4b46" roughness={0.9} />
       </mesh>
       {Array.from({ length: 13 }, (_, i) => {
         const isSymbol = symbols.includes(i);
         return (
-          <group key={i}>
-            <mesh position={[0, 0.02, spaceZ(i)]} rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[isSymbol ? 0.3 : 0.22, 20]} />
-              <meshStandardMaterial color={isSymbol ? "#3c8c50" : "#2e6e42"} />
-            </mesh>
-            {isSymbol && (
-              <Sprite
-                tex={koiLabel.tex}
-                aspect={koiLabel.aspect}
-                height={0.4}
-                position={[-0.62, 0.28, spaceZ(i)]}
-              />
-            )}
-          </group>
+          <mesh key={i} position={[0, 0.02, spaceZ(i)]} rotation={[-Math.PI / 2, 0, 0]}>
+            <circleGeometry args={[isSymbol ? 0.17 : 0.12, 18]} />
+            <meshStandardMaterial color={isSymbol ? "#3c8c50" : "#2e6e42"} />
+          </mesh>
         );
       })}
       {game.players.map((p, idx) => (
-        <mesh key={idx} position={[((idx % 3) - 1) * 0.24, 0.16, spaceZ(p.koiPos) + (idx > 2 ? 0.22 : 0)]}>
-          <sphereGeometry args={[0.13, 12, 12]} />
+        <mesh
+          key={idx}
+          position={[((idx % 3) - 1) * 0.16, 0.14, spaceZ(p.koiPos) + (idx > 2 ? 0.14 : 0)]}
+        >
+          <sphereGeometry args={[0.1, 12, 12]} />
           <meshStandardMaterial color={PLAYER_COLORS[idx].hex} roughness={0.3} />
         </mesh>
       ))}
@@ -283,10 +532,14 @@ function KoiBoard({ game }: { game: GameState }) {
 
 export function Board() {
   const game = useGame((s) => s.game);
+  const humanId = useGame((s) => s.humanId);
   if (!game) return null;
+  const numPlayers = game.config.numPlayers;
+  const sides = seatCount(numPlayers);
+  const apothem = Math.max(BOARD_W, BOARD_H) / 2 + 4.3;
   return (
     <group>
-      <TableAndBoard />
+      <TableAndBoard sides={sides} apothem={apothem} />
       {REGION_COLORS.map((color) => (
         <group key={color}>
           <RegionMarkers game={game} color={color} />
@@ -295,8 +548,18 @@ export function Board() {
         </group>
       ))}
       <PrestigePawns game={game} />
-      <FoxTokens game={game} />
-      <KoiBoard game={game} />
+      {game.players.map((_, idx) => (
+        <PlayerSeat
+          key={idx}
+          game={game}
+          playerIdx={idx}
+          seatIdx={seatForPlayer(idx, humanId, numPlayers, sides)}
+          sides={sides}
+          apothem={apothem}
+        />
+      ))}
+      <FoxTokens game={game} sides={sides} />
+      <KoiBoard game={game} sides={sides} />
     </group>
   );
 }

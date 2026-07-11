@@ -31,6 +31,8 @@ interface GameStore {
   connStatus: "idle" | "connecting" | "open" | "closed";
   selected: string[];
   leaderId: string | null;
+  /** Card ids in the player's preferred display order (drag-to-reorder). */
+  handOrder: string[];
   wizard: PlayWizard | null;
   drawerOpen: boolean;
   scoringDismissed: boolean;
@@ -49,6 +51,7 @@ interface GameStore {
   playAgain: () => void;
 
   toggleCard: (id: string) => void;
+  setHandOrder: (ids: string[]) => void;
   setLeader: (id: string) => void;
   clearSelection: () => void;
   beginPlay: () => void;
@@ -65,6 +68,15 @@ export function selectedCards(game: GameState, humanId: number, selected: string
   return selected
     .map((id) => hand.find((c) => c.id === id))
     .filter((c): c is Card => !!c);
+}
+
+/** Hand in the player's chosen display order; cards not yet ordered keep draw order at the end. */
+export function orderHand(hand: Card[], order: string[]): Card[] {
+  const pos = new Map(order.map((id, i) => [id, i]));
+  const known = hand.filter((c) => pos.has(c.id));
+  const rest = hand.filter((c) => !pos.has(c.id));
+  known.sort((a, b) => pos.get(a.id)! - pos.get(b.id)!);
+  return [...known, ...rest];
 }
 
 const net = new NetClient();
@@ -91,7 +103,15 @@ export const useGame = create<GameStore>((set, get) => {
           set({ lobby: msg, roomCode: msg.code });
           // Rematch: the host sent everyone back to the lobby.
           if (!msg.started && get().mode === "online" && get().game) {
-            set({ game: null, selected: [], leaderId: null, wizard: null, scoringDismissed: false });
+            // Card ids repeat between games, so the saved order must go too.
+            set({
+              game: null,
+              selected: [],
+              leaderId: null,
+              handOrder: [],
+              wizard: null,
+              scoringDismissed: false,
+            });
           }
           break;
         case "state": {
@@ -129,6 +149,7 @@ export const useGame = create<GameStore>((set, get) => {
     connStatus: "idle",
     selected: [],
     leaderId: null,
+    handOrder: [],
     wizard: null,
     drawerOpen: false,
     scoringDismissed: false,
@@ -144,6 +165,7 @@ export const useGame = create<GameStore>((set, get) => {
         roomCode: null,
         selected: [],
         leaderId: null,
+        handOrder: [],
         wizard: null,
         scoringDismissed: false,
       });
@@ -163,6 +185,7 @@ export const useGame = create<GameStore>((set, get) => {
         connStatus: "idle",
         selected: [],
         leaderId: null,
+        handOrder: [],
         wizard: null,
       });
     },
@@ -219,6 +242,7 @@ export const useGame = create<GameStore>((set, get) => {
       }
     },
 
+    setHandOrder: (ids) => set({ handOrder: ids }),
     setLeader: (id) => set({ leaderId: id }),
     clearSelection: () => set({ selected: [], leaderId: null }),
 

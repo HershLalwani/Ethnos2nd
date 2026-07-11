@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { CLAN_INFO, REGION_INFO } from "@/game/constants";
+import type { Clan, RegionColor } from "@/game/types";
 
 const cache = new Map<string, THREE.CanvasTexture>();
 
@@ -98,4 +100,42 @@ export function prestigeTokenTexture(opts: {
       ctx.fillText("+4", 194, 68);
     }
   });
+}
+
+/**
+ * Face of a played ally card lying flat on the table: Region-colored card with
+ * the clan emoji. Laid flat via a `rotation-x = -PI/2` mesh, the texture's top
+ * points toward the board — the "far" edge — so the card reads upright to the
+ * player seated on that side (each seat's card group is rotated to face them).
+ */
+export function cardTexture(
+  clan: Clan,
+  color: RegionColor,
+  leader = false
+): { tex: THREE.CanvasTexture; aspect: number } {
+  const w = 200;
+  const h = 280;
+  const key = `card-${clan}-${color}-${leader}`;
+  const region = REGION_INFO[color];
+  const tex = canvasTexture(key, w, h, (ctx) => {
+    ctx.fillStyle = region.hex;
+    roundRect(ctx, 6, 6, w - 12, h - 12, 24);
+    ctx.fill();
+
+    // Frosted inner panel so emojis stay legible on any Region color.
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    roundRect(ctx, 22, 22, w - 44, h - 44, 16);
+    ctx.fill();
+
+    ctx.font = `128px ${EMOJI_FONT}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(CLAN_INFO[clan].emoji, w / 2, h / 2 + 4);
+
+    ctx.lineWidth = leader ? 16 : 6;
+    ctx.strokeStyle = leader ? "#f6c945" : "rgba(0,0,0,0.4)";
+    roundRect(ctx, 9, 9, w - 18, h - 18, 22);
+    ctx.stroke();
+  });
+  return { tex, aspect: w / h };
 }

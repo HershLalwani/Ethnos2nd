@@ -334,10 +334,28 @@ button.danger {
   position: relative;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
   user-select: none;
+  touch-action: none;
 }
 .hand-card:hover {
   transform: translateY(-14px);
   z-index: 5;
+}
+.hand-card.dragging {
+  opacity: 0.35;
+}
+.hand-card.dragging:hover {
+  transform: none;
+}
+.drag-ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0.92;
+}
+.drag-ghost .hand-card {
+  margin: 0;
+  transform: rotate(2deg);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6);
 }
 .hand-card.selected {
   transform: translateY(-30px);
